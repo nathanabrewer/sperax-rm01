@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sperax RM-01 — Walk Through the Forest</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Georgia', serif;
+      background: #000;
+      color: #d4e8c2;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* === BACKGROUNDS === */
+    .bg-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    /* Video background (hidden by default) */
+    .video-bg { display: none; }
+    .video-bg.active { display: block; }
+    .video-bg video {
+      position: absolute;
+      top: 50%; left: 50%;
+      min-width: 100%; min-height: 100%;
+      transform: translate(-50%, -50%);
+      object-fit: cover;
+    }
+
+    /* Animated forest background */
+    .forest-bg {
+      background: linear-gradient(180deg, #050d05 0%, #0d1f0d 20%, #1a3318 50%, #2a4a28 100%);
+    }
+    .forest-bg.inactive { display: none; }
+
+    .sky {
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 45%;
+      background: radial-gradient(ellipse at 50% 80%, rgba(40,80,40,0.3) 0%, transparent 60%);
+    }
+    .sun-rays {
+      position: absolute;
+      top: 5%; left: 50%; width: 200px; height: 300px;
+      transform: translateX(-50%);
+      background: radial-gradient(ellipse at 50% 0%, rgba(180,200,120,0.08) 0%, transparent 70%);
+    }
+    .fog-layer {
+      position: absolute; left: 0; right: 0; pointer-events: none;
+      background: linear-gradient(180deg, rgba(20,40,20,0) 0%, rgba(30,50,30,0.3) 50%, rgba(20,40,20,0) 100%);
+    }
+    .particles { position: absolute; inset: 0; pointer-events: none; }
+    .particle {
+      position: absolute; width: 2px; height: 2px;
+      background: rgba(180,200,140,0.4); border-radius: 50%;
+    }
+
+    .tree-row {
+      position: absolute; left: 0; width: 100%;
+      display: flex; justify-content: center;
+      will-change: transform, opacity;
+    }
+    .tree-3d { position: relative; display: flex; flex-direction: column; align-items: center; }
+    .trunk { background: #3d2817; border-radius: 2px; }
+    .canopy { width: 0; height: 0; border-left: solid transparent; border-right: solid transparent; border-bottom: solid #1e5520; }
+    .canopy-2 { border-bottom-color: #1a4a1c; }
+
+    /* Shared overlays */
+    .vignette {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      box-shadow: inset 0 0 150px 60px rgba(0,0,0,0.7);
+    }
+    .dim-overlay {
+      position: fixed; inset: 0; z-index: 2; pointer-events: none;
+      background: rgba(0,0,0,0.5); transition: background 1s ease;
+    }
+
+    /* === UI === */
+    .ui-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: all 0.6s ease;
+    }
+    .ui-overlay.minimized { justify-content: flex-end; }
+
+    .main-panel {
+      background: rgba(0,0,0,0.75);
+      border: 1px solid rgba(100,160,80,0.2); border-radius: 16px;
+      padding: 28px; max-width: 380px; width: 90%;
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      transition: all 0.6s ease;
+    }
+    .ui-overlay.minimized .main-panel { display: none; }
+
+    h1 { font-size: 1.3em; text-align: center; margin-bottom: 4px; color: #a0d880; }
+    .subtitle { text-align: center; font-size: 0.8em; color: #7a9a6a; margin-bottom: 18px; }
+
+    .status {
+      text-align: center; font-size: 0.85em; padding: 8px; border-radius: 8px; margin-bottom: 14px;
+      background: rgba(100,160,80,0.08); border: 1px solid rgba(100,160,80,0.15);
+    }
+    .status.disconnected { color: #aa6644; border-color: rgba(170,100,70,0.2); background: rgba(170,100,70,0.08); }
+    .status.connected { color: #88bb66; }
+    .status.walking { color: #a0d880; background: rgba(100,200,80,0.1); border-color: rgba(100,200,80,0.2); }
+
+    .speed-display {
+      text-align: center; font-size: 3.5em; font-weight: bold; color: #c8e8a0;
+      margin: 6px 0 2px; font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 30px rgba(100,200,80,0.2);
+    }
+    .speed-label { text-align: center; font-size: 0.8em; color: #7a9a6a; margin-bottom: 12px; }
+    .speed-label a { color: #6a9a5a; text-decoration: none; }
+
+    .speed-slider {
+      width: 100%; margin: 8px 0 14px;
+      -webkit-appearance: none; height: 6px; border-radius: 3px;
+      background: rgba(100,160,80,0.15); outline: none;
+    }
+    .speed-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%;
+      background: #6ab040; cursor: pointer; border: 2px solid #4a8030;
+      box-shadow: 0 0 10px rgba(100,180,60,0.3);
+    }
+    .speed-slider:disabled::-webkit-slider-thumb { background: #444; cursor: not-allowed; box-shadow: none; }
+
+    .buttons { display: flex; gap: 8px; margin-bottom: 8px; }
+    .speed-buttons { display: flex; gap: 6px; margin-bottom: 12px; }
+    .speed-buttons button { font-size: 0.8em; padding: 7px; }
+
+    button {
+      flex: 1; padding: 10px 14px; font-size: 0.95em; font-family: 'Georgia', serif;
+      border: 1px solid rgba(100,160,80,0.3); border-radius: 10px; cursor: pointer;
+      transition: all 0.2s; background: rgba(100,160,80,0.12); color: #c8e8a0;
+    }
+    button:hover:not(:disabled) { background: rgba(100,160,80,0.25); }
+    button:disabled { opacity: 0.25; cursor: not-allowed; }
+    button.connect { background: rgba(100,180,80,0.2); border-color: rgba(100,180,80,0.4); }
+    button.stop { background: rgba(180,80,60,0.15); border-color: rgba(180,80,60,0.3); color: #e8a090; }
+
+    /* Video picker */
+    .video-picker {
+      margin-top: 12px; padding-top: 10px;
+      border-top: 1px solid rgba(100,160,80,0.1);
+      text-align: center; font-size: 0.75em; color: #5a7a4a;
+    }
+    .video-picker a { color: #6a9a5a; text-decoration: none; cursor: pointer; }
+    .video-picker a:hover { text-decoration: underline; }
+    .video-picker input { display: none; }
+
+    .credit { text-align: center; margin-top: 8px; font-size: 0.65em; color: #3a5a2a; }
+    .credit a { color: #4a6a3a; text-decoration: none; }
+
+    /* === BOTTOM BAR === */
+    .bottom-bar {
+      display: none; width: 100%; max-width: 480px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(100,160,80,0.15);
+      border-radius: 16px 16px 0 0; border-bottom: none;
+      padding: 14px 20px;
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    }
+    .ui-overlay.minimized .bottom-bar { display: block; }
+
+    .bar-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .bar-speed {
+      font-size: 2.2em; font-weight: bold; color: #c8e8a0;
+      font-variant-numeric: tabular-nums; text-shadow: 0 0 20px rgba(100,200,80,0.2);
+    }
+    .bar-unit { font-size: 0.75em; color: #7a9a6a; margin-left: 6px; cursor: pointer; }
+    .bar-unit:hover { color: #a0d880; }
+    .bar-status { font-size: 0.8em; color: #88bb66; }
+    .bar-controls { display: flex; gap: 8px; align-items: center; }
+
+    .bar-slider {
+      flex: 1; -webkit-appearance: none; height: 5px; border-radius: 3px;
+      background: rgba(100,160,80,0.15); outline: none;
+    }
+    .bar-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
+      background: #6ab040; cursor: pointer; border: 2px solid #4a8030;
+    }
+
+    .bar-btn {
+      padding: 8px 12px; font-size: 0.8em; font-family: 'Georgia', serif;
+      border: 1px solid rgba(100,160,80,0.25); border-radius: 8px; cursor: pointer;
+      background: rgba(100,160,80,0.1); color: #c8e8a0; white-space: nowrap;
+    }
+    .bar-btn:hover { background: rgba(100,160,80,0.25); }
+    .bar-btn.stop-btn { background: rgba(180,80,60,0.15); border-color: rgba(180,80,60,0.3); color: #e8a090; }
+    .bar-btn.stop-btn:hover { background: rgba(180,80,60,0.3); }
+  </style>
+</head>
+<body>
+
+<!-- Animated forest (default) -->
+<div class="bg-layer forest-bg" id="forestBg">
+  <div class="sky"></div>
+  <div class="sun-rays"></div>
+  <div class="fog-layer" style="bottom:20%;height:25%;opacity:0.4;"></div>
+  <div class="fog-layer" style="top:30%;height:20%;opacity:0.2;"></div>
+  <div id="treeContainer"></div>
+  <div class="particles" id="particles"></div>
+</div>
+
+<!-- Video background (optional) -->
+<div class="bg-layer video-bg" id="videoBg">
+  <video id="forestVideo" loop muted playsinline></video>
+</div>
+
+<div class="vignette"></div>
+<div class="dim-overlay" id="dimOverlay"></div>
+
+<div class="ui-overlay" id="uiOverlay">
+  <div class="main-panel" id="mainPanel">
+    <h1>Walk Through the Forest</h1>
+    <div class="subtitle">Sperax RM-01 Walking Pad</div>
+    <div class="status disconnected" id="status">Not connected</div>
+    <div class="speed-display" id="speedDisplay">0.0</div>
+    <div class="speed-label">
+      <span id="unitLabel">km/h</span> —
+      <a href="#" id="toggleUnit">switch to mph</a>
+    </div>
+    <input type="range" class="speed-slider" id="speedSlider" min="0.5" max="6.0" step="0.5" value="2.0" disabled>
+    <div class="speed-buttons">
+      <button id="btnMinus" disabled>−</button>
+      <button id="btn1" disabled>1.0</button>
+      <button id="btn2" disabled>2.0</button>
+      <button id="btn3" disabled>3.0</button>
+      <button id="btn4" disabled>4.0</button>
+      <button id="btnPlus" disabled>+</button>
+    </div>
+    <div class="buttons">
+      <button class="connect" id="btnConnect">Connect</button>
+      <button id="btnStart" disabled>Start</button>
+      <button class="stop" id="btnStop" disabled>Stop</button>
+    </div>
+    <div class="video-picker">
+      <a id="loadVideoLink">Load a walk video</a> for an immersive background<br>
+      <span style="color:#4a6a3a;">Try a forest walk from <a href="https://www.pexels.com/search/videos/forest%20walk%20pov/" target="_blank">Pexels</a></span>
+      <input type="file" id="videoFileInput" accept="video/*">
+    </div>
+    <div class="credit">
+      <a href="https://github.com/nathanabrewer/sperax-rm01">sperax-rm01</a>
+    </div>
+  </div>
+
+  <div class="bottom-bar" id="bottomBar">
+    <div class="bar-top">
+      <div>
+        <span class="bar-speed" id="barSpeed">0.0</span>
+        <span class="bar-unit" id="barUnit" title="Click to toggle units">km/h</span>
+      </div>
+      <div class="bar-status" id="barStatus">Walking</div>
+    </div>
+    <div class="bar-controls">
+      <button class="bar-btn" id="barMinus">−</button>
+      <input type="range" class="bar-slider" id="barSlider" min="0.5" max="6.0" step="0.5" value="2.0">
+      <button class="bar-btn" id="barPlus">+</button>
+      <button class="bar-btn stop-btn" id="barStop">Stop</button>
+    </div>
+  </div>
+</div>
+
+<script src="sperax-rm01.js"></script>
+<script>
+const pad = new SperaxPad();
+const video = document.getElementById('forestVideo');
+const videoBg = document.getElementById('videoBg');
+const forestBg = document.getElementById('forestBg');
+const dimOverlay = document.getElementById('dimOverlay');
+const uiOverlay = document.getElementById('uiOverlay');
+const statusEl = document.getElementById('status');
+const speedDisplay = document.getElementById('speedDisplay');
+const speedSlider = document.getElementById('speedSlider');
+const treeContainer = document.getElementById('treeContainer');
+const particlesEl = document.getElementById('particles');
+
+const btnConnect = document.getElementById('btnConnect');
+const btnStart = document.getElementById('btnStart');
+const btnStop = document.getElementById('btnStop');
+const btnMinus = document.getElementById('btnMinus');
+const btnPlus = document.getElementById('btnPlus');
+const speedBtns = [document.getElementById('btn1'), document.getElementById('btn2'), document.getElementById('btn3'), document.getElementById('btn4')];
+
+const barSpeed = document.getElementById('barSpeed');
+const barUnit = document.getElementById('barUnit');
+const barStatus = document.getElementById('barStatus');
+const barSlider = document.getElementById('barSlider');
+const barMinus = document.getElementById('barMinus');
+const barPlus = document.getElementById('barPlus');
+const barStop = document.getElementById('barStop');
+
+let useImperial = false;
+let hasVideo = false;
+const unitLabel = document.getElementById('unitLabel');
+const toggleUnit = document.getElementById('toggleUnit');
+
+function toDisplay(kmh) { return useImperial ? (kmh * 0.621371).toFixed(1) : kmh.toFixed(1); }
+function unitStr() { return useImperial ? 'mph' : 'km/h'; }
+
+function toggleUnits() {
+  useImperial = !useImperial;
+  unitLabel.textContent = unitStr();
+  toggleUnit.textContent = useImperial ? 'switch to km/h' : 'switch to mph';
+  barUnit.textContent = unitStr();
+  updateUI();
+}
+toggleUnit.addEventListener('click', (e) => { e.preventDefault(); toggleUnits(); });
+barUnit.addEventListener('click', toggleUnits);
+
+// === VIDEO FILE PICKER ===
+const loadVideoLink = document.getElementById('loadVideoLink');
+const videoFileInput = document.getElementById('videoFileInput');
+
+loadVideoLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  videoFileInput.click();
+});
+
+videoFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  video.src = url;
+  video.load();
+  hasVideo = true;
+  videoBg.classList.add('active');
+  forestBg.classList.add('inactive');
+  loadVideoLink.textContent = file.name;
+  updateVideo();
+});
+
+// Try local forest.mp4 first, fall back to GitHub release CDN
+const VIDEO_SOURCES = [
+  'forest.mp4',
+  'https://github.com/nathanabrewer/sperax-rm01/releases/download/v0.1.0/forest.mp4',
+];
+
+function tryLoadVideo(sources) {
+  if (sources.length === 0) return; // No video available, animated forest stays
+  const src = sources[0];
+  video.src = src;
+  video.addEventListener('canplay', function onCanPlay() {
+    hasVideo = true;
+    videoBg.classList.add('active');
+    forestBg.classList.add('inactive');
+    const name = src.includes('://') ? 'Forest walk (CDN)' : 'forest.mp4';
+    loadVideoLink.textContent = name + ' — change video';
+  }, { once: true });
+  video.addEventListener('error', () => {
+    hasVideo = false;
+    video.removeAttribute('src');
+    tryLoadVideo(sources.slice(1));
+  }, { once: true });
+  video.load();
+}
+
+tryLoadVideo(VIDEO_SOURCES);
+
+// Web Bluetooth check
+if (!navigator.bluetooth) {
+  statusEl.textContent = 'Web Bluetooth not supported — use Chrome/Edge';
+  statusEl.className = 'status disconnected';
+  btnConnect.disabled = true;
+}
+
+// === ANIMATED FOREST ===
+const treeRows = [];
+const NUM_ROWS = 12;
+const ROW_SPACING = 8;
+
+function buildForest() {
+  for (let i = 0; i < NUM_ROWS; i++) {
+    const row = document.createElement('div');
+    row.className = 'tree-row';
+    const depth = i / NUM_ROWS;
+    const gap = 50 + (1 - depth) * 300;
+    const scale = 0.15 + (1 - depth) * 1.2;
+
+    const left = makeTree(scale);
+    const right = makeTree(scale);
+    left.style.marginRight = gap + 'px';
+    right.style.marginLeft = gap + 'px';
+    row.appendChild(left);
+    row.appendChild(right);
+
+    if (Math.random() > 0.5) {
+      const extra = makeTree(scale * 0.6);
+      extra.style.marginRight = (gap * 0.3) + 'px';
+      row.insertBefore(extra, left);
+    }
+    if (Math.random() > 0.5) {
+      const extra = makeTree(scale * 0.6);
+      extra.style.marginLeft = (gap * 0.3) + 'px';
+      row.appendChild(extra);
+    }
+
+    row._offset = i * ROW_SPACING;
+    treeContainer.appendChild(row);
+    treeRows.push(row);
+  }
+
+  for (let i = 0; i < 25; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = (20 + Math.random() * 60) + '%';
+    p.style.top = (30 + Math.random() * 40) + '%';
+    p._baseX = parseFloat(p.style.left);
+    p._baseY = parseFloat(p.style.top);
+    p._phase = Math.random() * Math.PI * 2;
+    particlesEl.appendChild(p);
+  }
+}
+
+function makeTree(scale) {
+  const tree = document.createElement('div');
+  tree.className = 'tree-3d';
+  const cs = Math.round(20 * scale);
+  const ch = Math.round(40 * scale);
+  const th = Math.round(25 * scale);
+  const tw = Math.max(3, Math.round(6 * scale));
+  const g = Math.round(70 + Math.random() * 30);
+
+  const c1 = document.createElement('div');
+  c1.className = 'canopy';
+  c1.style.cssText = `border-left-width:${cs}px;border-right-width:${cs}px;border-bottom-width:${ch}px;border-bottom-color:rgb(${Math.round(g*0.4)},${g},${Math.round(g*0.4)})`;
+
+  const c2 = document.createElement('div');
+  c2.className = 'canopy canopy-2';
+  c2.style.cssText = `border-left-width:${cs*0.75}px;border-right-width:${cs*0.75}px;border-bottom-width:${ch*0.7}px;margin-top:${-ch*0.4}px`;
+
+  const trunk = document.createElement('div');
+  trunk.className = 'trunk';
+  trunk.style.cssText = `width:${tw}px;height:${th}px`;
+
+  tree.append(c1, c2, trunk);
+  return tree;
+}
+
+let forestOffset = 0;
+let animTime = 0;
+
+function animateForest() {
+  if (hasVideo) return;
+  const speed = pad.running ? pad.speed : 0;
+
+  if (speed > 0.01) {
+    forestOffset += speed * 0.3;
+    treeRows.forEach((row, i) => {
+      const pos = ((row._offset + forestOffset) % (NUM_ROWS * ROW_SPACING)) / (NUM_ROWS * ROW_SPACING);
+      const y = 30 + pos * 45;
+      const s = 0.1 + (1 - pos) * 1.0;
+      const o = Math.max(0, (1 - pos) * 1.5);
+      row.style.cssText = `position:absolute;left:0;width:100%;display:flex;justify-content:center;top:${y}%;transform:scale(${s});opacity:${o};z-index:${Math.round(pos*100)}`;
+    });
+  }
+
+  animTime += 0.016;
+  const pNodes = particlesEl.children;
+  for (let i = 0; i < pNodes.length; i++) {
+    const p = pNodes[i];
+    p.style.left = (p._baseX + Math.sin(animTime * 0.5 + p._phase) * 3) + '%';
+    p.style.top = (p._baseY + Math.cos(animTime * 0.3 + p._phase) * 2) + '%';
+    p.style.opacity = 0.2 + Math.sin(animTime + p._phase) * 0.3;
+  }
+}
+
+// === VIDEO CONTROL ===
+let targetRate = 0;
+
+function updateVideo() {
+  if (!hasVideo) return;
+  if (pad.running && pad.speed > 0) {
+    targetRate = Math.max(0.1, Math.min(4.0, pad.speed));
+    if (video.paused) video.play();
+  } else {
+    targetRate = 0;
+  }
+}
+
+function animateVideoRate() {
+  if (hasVideo) {
+    const current = video.playbackRate;
+    const diff = targetRate - current;
+    if (Math.abs(diff) > 0.01) {
+      video.playbackRate = Math.max(0.1, current + diff * 0.05);
+    } else if (targetRate === 0 && !video.paused) {
+      video.playbackRate = 0.1;
+      video.pause();
+    }
+  }
+}
+
+// === MAIN LOOP ===
+function animate() {
+  animateForest();
+  animateVideoRate();
+
+  // Dim overlay
+  const speed = pad.running ? pad.speed : 0;
+  const dim = speed > 0 ? Math.max(0.1, 0.5 - speed / 12) : 0.5;
+  dimOverlay.style.background = `rgba(0,0,0,${dim})`;
+
+  requestAnimationFrame(animate);
+}
+
+// === UI ===
+function updateUI() {
+  const spd = pad.running ? pad.speed : 0;
+  const d = toDisplay(spd);
+  const u = unitStr();
+
+  speedDisplay.textContent = d;
+  speedSlider.value = pad.running ? pad.speed : 2.0;
+  barSpeed.textContent = d;
+  barUnit.textContent = u;
+  barSlider.value = pad.running ? pad.speed : 2.0;
+
+  btnStart.disabled = !pad.connected || pad.running;
+  btnStop.disabled = !pad.connected || !pad.running;
+  speedSlider.disabled = !pad.connected;
+  btnMinus.disabled = !(pad.connected && pad.running);
+  btnPlus.disabled = !(pad.connected && pad.running);
+  speedBtns.forEach(b => b.disabled = !pad.connected);
+
+  if (pad.running) {
+    uiOverlay.classList.add('minimized');
+    barStatus.textContent = `Walking — ${d} ${u}`;
+  } else {
+    uiOverlay.classList.remove('minimized');
+  }
+
+  if (!pad.connected) {
+    statusEl.textContent = 'Not connected';
+    statusEl.className = 'status disconnected';
+    btnConnect.textContent = 'Connect';
+  } else if (pad.running) {
+    statusEl.textContent = `Walking — ${d} ${u}`;
+    statusEl.className = 'status walking';
+    btnConnect.textContent = 'Disconnect';
+  } else {
+    statusEl.textContent = 'Connected — ready';
+    statusEl.className = 'status connected';
+    btnConnect.textContent = 'Disconnect';
+  }
+
+  updateVideo();
+}
+
+// === EVENTS ===
+pad.addEventListener('statechange', updateUI);
+pad.addEventListener('connected', updateUI);
+pad.addEventListener('disconnected', updateUI);
+
+btnConnect.addEventListener('click', async () => {
+  if (pad.connected) { await pad.disconnect(); }
+  else { try { await pad.connect(); } catch(e) { statusEl.textContent = e.message; } }
+});
+btnStart.addEventListener('click', async () => { try { await pad.start(parseFloat(speedSlider.value)); } catch(e) {} });
+btnStop.addEventListener('click', async () => { try { await pad.stop(); } catch(e) {} });
+
+speedSlider.addEventListener('input', () => { if (pad.connected) speedDisplay.textContent = toDisplay(parseFloat(speedSlider.value)); });
+speedSlider.addEventListener('change', async () => { if (pad.connected) try { await pad.setSpeed(parseFloat(speedSlider.value)); } catch(e) {} });
+
+btnMinus.addEventListener('click', async () => { if (pad.running) try { await pad.setSpeed(Math.max(SPEED_MIN, pad.speed - 0.5)); } catch(e) {} });
+btnPlus.addEventListener('click', async () => { if (pad.running) try { await pad.setSpeed(Math.min(SPEED_MAX, pad.speed + 0.5)); } catch(e) {} });
+
+speedBtns.forEach((btn, i) => {
+  const speed = [1.0, 2.0, 3.0, 4.0][i];
+  btn.addEventListener('click', async () => {
+    if (!pad.connected) return;
+    try { if (!pad.running) await pad.start(speed); else await pad.setSpeed(speed); } catch(e) {}
+  });
+});
+
+barMinus.addEventListener('click', async () => { try { await pad.setSpeed(Math.max(SPEED_MIN, pad.speed - 0.5)); } catch(e) {} });
+barPlus.addEventListener('click', async () => { try { await pad.setSpeed(Math.min(SPEED_MAX, pad.speed + 0.5)); } catch(e) {} });
+barSlider.addEventListener('change', async () => { try { await pad.setSpeed(parseFloat(barSlider.value)); } catch(e) {} });
+barSlider.addEventListener('input', () => { barSpeed.textContent = toDisplay(parseFloat(barSlider.value)); });
+barStop.addEventListener('click', async () => { try { await pad.stop(); } catch(e) {} });
+
+// Init
+buildForest();
+animate();
+updateUI();
+</script>
+</body>
+</html>
