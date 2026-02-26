@@ -105,7 +105,14 @@ class SperaxPad:
         self._keepalive_task = asyncio.create_task(self._keepalive())
 
     async def disconnect(self) -> None:
-        """Disconnect from the pad."""
+        """Disconnect from the pad. Stops the belt first if running."""
+        if self._running and self._client is not None and self._client.is_connected:
+            try:
+                await self._send_cmd(bytes([CMD_RUN_CTRL, 0x00, 0x00, 0x00]))
+                await asyncio.sleep(0.5)
+            except Exception:
+                pass
+
         if self._keepalive_task is not None:
             self._stop_event.set()
             self._keepalive_task.cancel()
@@ -149,6 +156,8 @@ class SperaxPad:
     async def stop(self) -> None:
         """Stop the belt."""
         self._ensure_connected()
+        await self._send_cmd(bytes([CMD_RUN_CTRL, 0x00, 0x00, 0x00]))
+        await asyncio.sleep(0.5)
         await self._send_cmd(bytes([CMD_RUN_CTRL, 0x00, 0x00, 0x00]))
         self._running = False
         self._speed = 0.0
